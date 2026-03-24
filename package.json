@@ -1,0 +1,45 @@
+{
+  "name": "shop24mart-print-bridge",
+  "version": "1.0.0",
+  "description": "Shop24Mart Thermal Print Bridge",
+  "main": "main.js",
+  "author": "Shop24Mart",
+  "scripts": {
+    "start": "electron .",
+    "build": "electron-builder --win --x64"
+  },
+"build": {
+    "appId": "com.shop24mart.printbridge",
+    "productName": "Shop24Mart Print Bridge",
+    "forceCodeSigning": false,
+    "win": {
+      "target": "nsis",
+      "icon": "icon.ico",
+      "signingHashAlgorithms": null,
+      "sign": null
+    },
+    "nsis": {
+      "oneClick": true,
+      "runAfterFinish": true,
+      "createDesktopShortcut": false,
+      "createStartMenuShortcut": true
+    },
+    "directories": {
+      "buildResources": ".",
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "icon.ico",
+      "icon.png",
+      "node_modules/**/*"
+    ]
+},
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.0.0"
+  }
+}
