@@ -1,7 +1,8 @@
 const { app, Tray, Menu, nativeImage, Notification, dialog } = require('electron');
-const { WebSocketServer } = require('ws');
+const WebSocket = require('ws');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 
 // ─── Hide from taskbar & dock, tray only ───────────────────────────────────
 app.dock && app.dock.hide();
@@ -10,116 +11,147 @@ app.dock && app.dock.hide();
 const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) { app.quit(); }
 
+// ─── Configuration ────────────────────────────────────────────────────────
+// Use computer name as default device ID if not specified
+const DEVICE_ID = process.env.DEVICE_ID || os.hostname() || 'shop-device-1';
+const CLOUD_URL = process.env.CLOUD_URL || 'ws://localhost:3001';
+const SECRET_TOKEN = process.env.SECRET_TOKEN || 'shop24mart-secure-token';
+
 // ─── Logging ──────────────────────────────────────────────────────────────
 const logDir = path.join(app.getPath('userData'), 'logs');
-fs.mkdirSync(logDir, { recursive: true });
+if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
 const logFile = path.join(logDir, 'bridge.log');
 
 function log(msg) {
     const line = `[${new Date().toLocaleString('en-NG')}] ${msg}\n`;
     fs.appendFileSync(logFile, line);
+    console.log(msg);
 }
 
 // ─── State ─────────────────────────────────────────────────────────────────
-const PORT = 3001;
-let wss = null;
+let ws = null;
 let tray = null;
-let isRunning = false;
-let connectedClients = 0;
+let isConnected = false;
+let isConnecting = false;
 let jobsHandled = 0;
+let reconnectTimeout = null;
 
-// ─── WebSocket Bridge ──────────────────────────────────────────────────────
-function startBridge() {
-    if (wss) return;
+// ─── WebSocket Client ──────────────────────────────────────────────────────
+function connectToCloud() {
+    if (ws || isConnecting) return;
 
-    wss = new WebSocketServer({ port: PORT });
-    isRunning = true;
+    isConnecting = true;
+    updateTray();
+    
+    log(`Connecting to cloud: ${CLOUD_URL}...`);
 
-    log(`Bridge started on ws://localhost:${PORT}`);
+    ws = new WebSocket(CLOUD_URL);
 
-    wss.on('connection', (ws) => {
-        connectedClients++;
-        log(`Client connected. (${connectedClients} active)`);
+    ws.on('open', () => {
+        isConnecting = false;
+        isConnected = true;
+        log(`Connected to cloud. Registering as ${DEVICE_ID}...`);
+        
+        // Register device
+        ws.send(JSON.stringify({
+            type: 'register',
+            deviceId: DEVICE_ID,
+            token: SECRET_TOKEN
+        }));
+        
         updateTray();
-
-        ws.on('message', async (message) => {
-            try {
-                const { buffer: base64, printerName } = JSON.parse(message.toString());
-
-                const targetPrinter = printerName
-                    ? `\\\\localhost\\${printerName.replace('POSPrinter ', '')}`
-                    : `\\\\localhost\\POS58`;
-
-                log(`Print job #${++jobsHandled} → ${targetPrinter}`);
-
-                const buffer = Buffer.from(base64, 'base64');
-
-                fs.writeFile(targetPrinter, buffer, (err) => {
-                    if (err) {
-                        log(`Print failed: ${err.message}`);
-                        ws.send(JSON.stringify({ ok: false, error: `Print failed: ${err.message}` }));
-                        showNotification('Print Failed', err.message, 'error');
-                    } else {
-                        log(`Job #${jobsHandled} printed successfully.`);
-                        ws.send(JSON.stringify({ ok: true }));
-                        showNotification('Receipt Printed', `Job #${jobsHandled} sent to printer.`, 'success');
-                    }
-                });
-
-            } catch (err) {
-                log(`Processing error: ${err.message}`);
-                ws.send(JSON.stringify({ ok: false, error: err.message }));
-            }
-        });
-
-        ws.on('close', () => {
-            connectedClients = Math.max(0, connectedClients - 1);
-            log(`Client disconnected. (${connectedClients} active)`);
-            updateTray();
-        });
-
-        ws.on('error', (err) => log(`WS error: ${err.message}`));
+        showNotification('Bridge Connected', `Linked to cloud as: ${DEVICE_ID}`);
     });
 
-    wss.on('error', (err) => {
-        log(`Server error: ${err.message}`);
-        isRunning = false;
-        wss = null;
-        updateTray();
-        if (err.code === 'EADDRINUSE') {
-            showNotification('Port In Use', `Port ${PORT} is already in use.`, 'error');
+    ws.on('message', async (data) => {
+        try {
+            const message = JSON.parse(data.toString());
+            log(`Received: ${message.type || 'unknown'}`);
+
+            if (message.type === 'registered') {
+                log(`Device registration confirmed: ${message.deviceId}`);
+            }
+
+            if (message.type === 'print_job') {
+                handlePrintJob(message);
+            }
+
+            if (message.type === 'error') {
+                log(`Server error: ${message.message}`);
+                showNotification('Cloud Error', message.message);
+            }
+
+        } catch (err) {
+            log(`Message parse error: ${err.message}`);
         }
     });
 
-    updateTray();
-}
-
-function stopBridge(cb) {
-    if (!wss) { cb && cb(); return; }
-
-    log('Stopping bridge...');
-    isRunning = false;
-
-    // Close all connections
-    wss.clients.forEach(ws => ws.terminate());
-
-    wss.close(() => {
-        wss = null;
-        connectedClients = 0;
-        log('Bridge stopped.');
+    ws.on('close', () => {
+        isConnected = false;
+        isConnecting = false;
+        ws = null;
+        log('Disconnected from cloud. Retrying in 5s...');
         updateTray();
-        cb && cb();
+        
+        // Auto-reconnect
+        if (!reconnectTimeout) {
+            reconnectTimeout = setTimeout(() => {
+                reconnectTimeout = null;
+                connectToCloud();
+            }, 5000);
+        }
+    });
+
+    ws.on('error', (err) => {
+        log(`WS error: ${err.message}`);
+        isConnecting = false;
+        updateTray();
+    });
+
+    // Heartbeat: Response to server ping
+    ws.on('ping', () => {
+        ws.pong();
     });
 }
 
-function restartBridge() {
-    log('Restarting bridge...');
-    stopBridge(() => {
-        setTimeout(() => {
-            startBridge();
-            showNotification('Bridge Restarted', `Listening on ws://localhost:${PORT}`, 'success');
-        }, 500);
-    });
+function handlePrintJob(job) {
+    try {
+        const { buffer: base64, printerName } = job;
+
+        // Windows thermal printer path hack
+        // If printer is shared as "POS58", path is \\localhost\POS58
+        const cleanPrinterName = (printerName || 'POS58').replace('POSPrinter ', '');
+        const targetPrinter = `\\\\${os.hostname()}\\${cleanPrinterName}`;
+
+        log(`Print job #${++jobsHandled} → ${targetPrinter}`);
+
+        const buffer = Buffer.from(base64, 'base64');
+
+        fs.writeFile(targetPrinter, buffer, (err) => {
+            if (err) {
+                log(`Print failed: ${err.message}`);
+                showNotification('Print Failed', err.message);
+            } else {
+                log(`Job #${jobsHandled} printed successfully.`);
+                showNotification('Receipt Printed', `Job #${jobsHandled} sent to printer.`);
+            }
+            updateTray();
+        });
+
+    } catch (err) {
+        log(`Processing error: ${err.message}`);
+    }
+}
+
+function disconnectCloud() {
+    if (ws) {
+        log('Closing connection...');
+        ws.close();
+        ws = null;
+    }
+    isConnected = false;
+    isConnecting = false;
+    updateTray();
 }
 
 // ─── Notifications ─────────────────────────────────────────────────────────
@@ -131,9 +163,9 @@ function showNotification(title, body) {
 
 // ─── Tray ──────────────────────────────────────────────────────────────────
 function getStatusLabel() {
-    if (!isRunning) return '⛔  Stopped';
-    if (connectedClients > 0) return `🟢  Connected (${connectedClients} client${connectedClients > 1 ? 's' : ''})`;
-    return `🟡  Running — waiting for connection`;
+    if (isConnecting) return '🟡  Connecting...';
+    if (isConnected) return `🟢  Online: ${DEVICE_ID}`;
+    return `⛔  Offline (Disconnected)`;
 }
 
 function updateTray() {
@@ -141,7 +173,7 @@ function updateTray() {
 
     const menu = Menu.buildFromTemplate([
         {
-            label: 'Shop24Mart Print Bridge',
+            label: 'Shop24Mart Print Bridge (Cloud)',
             enabled: false,
         },
         { type: 'separator' },
@@ -150,7 +182,7 @@ function updateTray() {
             enabled: false,
         },
         {
-            label: `📋  Port: ${PORT}`,
+            label: `🆔  Device: ${DEVICE_ID}`,
             enabled: false,
         },
         {
@@ -159,25 +191,22 @@ function updateTray() {
         },
         { type: 'separator' },
         {
-            label: '▶  Start Bridge',
-            enabled: !isRunning,
+            label: '▶  Connect to Cloud',
+            enabled: !isConnected && !isConnecting,
+            click: () => connectToCloud()
+        },
+        {
+            label: '🔄  Force Reconnect',
+            enabled: true,
             click: () => {
-                startBridge();
-                showNotification('Bridge Started', `Listening on ws://localhost:${PORT}`);
+                disconnectCloud();
+                setTimeout(connectToCloud, 1000);
             }
         },
         {
-            label: '🔄  Restart Bridge',
-            enabled: isRunning,
-            click: () => restartBridge()
-        },
-        {
-            label: '⏹  Stop Bridge',
-            enabled: isRunning,
-            click: () => {
-                stopBridge();
-                showNotification('Bridge Stopped', 'Print bridge has been stopped.');
-            }
+            label: '⏹  Disconnect',
+            enabled: isConnected || isConnecting,
+            click: () => disconnectCloud()
         },
         { type: 'separator' },
         {
@@ -191,16 +220,17 @@ function updateTray() {
         {
             label: '✕  Quit',
             click: () => {
-                stopBridge(() => app.quit());
+                disconnectCloud();
+                app.quit();
             }
         }
     ]);
 
     tray.setContextMenu(menu);
     tray.setToolTip(
-        isRunning
-            ? `Shop24Mart Bridge • Running on :${PORT}`
-            : 'Shop24Mart Bridge • Stopped'
+        isConnected
+            ? `Shop24Mart Bridge • Online as ${DEVICE_ID}`
+            : 'Shop24Mart Bridge • Offline'
     );
 }
 
@@ -219,14 +249,14 @@ app.whenReady().then(() => {
     tray.on('click', () => {
         showNotification(
             'Shop24Mart Print Bridge',
-            isRunning
-                ? `Running on ws://localhost:${PORT} • ${jobsHandled} jobs`
-                : 'Bridge is stopped. Right-click to start.'
+            isConnected
+                ? `Connected to cloud as: ${DEVICE_ID}`
+                : 'Bridge is offline. Right-click to connect.'
         );
     });
 
-    // Auto-start bridge
-    startBridge();
+    // Auto-connect
+    connectToCloud();
     updateTray();
 
     log('App ready.');
