@@ -14,8 +14,8 @@ if (!gotLock) { app.quit(); }
 // ─── Configuration ────────────────────────────────────────────────────────
 // Use computer name as default device ID if not specified
 const DEVICE_ID = process.env.DEVICE_ID || os.hostname() || 'shop-device-1';
-const CLOUD_URL = process.env.CLOUD_URL || 'ws://localhost:3001';
-const SECRET_TOKEN = process.env.SECRET_TOKEN || 'shop24mart-secure-token';
+const CLOUD_URL = process.env.CLOUD_URL || 'wss://desktop-app-p9b4.onrender.com';
+const SECRET_TOKEN = process.env.SECRET_TOKEN || 'BLkXnNZjUqv-P2sR2IbCUkhfC3s7wzukYhjBvTv5NNxY8D7fgUobCETW4Ft-HqcK8VPKWTIHbY7gRsYUsBVidNg';
 
 // ─── Logging ──────────────────────────────────────────────────────────────
 const logDir = path.join(app.getPath('userData'), 'logs');
