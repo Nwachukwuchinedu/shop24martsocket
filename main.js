@@ -1,11 +1,15 @@
-const { app, Tray, Menu, nativeImage, Notification, dialog } = require('electron');
-const WebSocket = require('ws');
-const fs = require('fs');
-const path = require('path');
-const os = require('os');
+import { app, Tray, Menu, nativeImage, Notification, dialog } from 'electron';
+import WebSocket from 'ws';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 // ─── Hide from taskbar & dock, tray only ───────────────────────────────────
-app.dock && app.dock.hide();
+if (app.dock) app.dock.hide();
 
 // ─── Single instance lock ──────────────────────────────────────────────────
 const gotLock = app.requestSingleInstanceLock();
@@ -13,7 +17,7 @@ if (!gotLock) { app.quit(); }
 
 // ─── Configuration ────────────────────────────────────────────────────────
 // Use computer name as default device ID if not specified
-const DEVICE_ID = process.env.DEVICE_ID || os.hostname() || 'shop-device-1';
+const DEVICE_ID = process.env.DEVICE_ID || 'shop-device-1';
 const CLOUD_URL = process.env.CLOUD_URL || 'wss://desktop-app-p9b4.onrender.com';
 const SECRET_TOKEN = process.env.SECRET_TOKEN || 'BLkXnNZjUqv-P2sR2IbCUkhfC3s7wzukYhjBvTv5NNxY8D7fgUobCETW4Ft-HqcK8VPKWTIHbY7gRsYUsBVidNg';
 
@@ -119,7 +123,6 @@ function handlePrintJob(job) {
         const { buffer: base64, printerName } = job;
 
         // Windows thermal printer path hack
-        // If printer is shared as "POS58", path is \\localhost\POS58
         const cleanPrinterName = (printerName || 'POS58').replace('POSPrinter ', '');
         const targetPrinter = `\\\\${os.hostname()}\\${cleanPrinterName}`;
 
@@ -212,8 +215,9 @@ function updateTray() {
         {
             label: '📄  View Logs',
             click: () => {
-                const { shell } = require('electron');
-                shell.openPath(logFile);
+                import('electron').then(({ shell }) => {
+                    shell.openPath(logFile);
+                });
             }
         },
         { type: 'separator' },

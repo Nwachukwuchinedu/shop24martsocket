@@ -1,6 +1,7 @@
 {
   "name": "shop24mart-print-bridge",
   "version": "1.0.0",
+  "type": "module",
   "description": "Shop24Mart Thermal Print Bridge",
   "main": "main.js",
   "author": "Shop24Mart",

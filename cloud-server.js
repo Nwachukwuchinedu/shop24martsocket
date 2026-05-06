@@ -1,9 +1,9 @@
-const { WebSocketServer } = require('ws');
-const http = require('http');
+import { WebSocketServer } from 'ws';
+import http from 'http';
 
 // Configuration
 const PORT = process.env.PORT || 3001;
-const SECRET_TOKEN = process.env.SECRET_TOKEN || 'shop24mart-secure-token';
+const SECRET_TOKEN = process.env.SECRET_TOKEN || 'BLkXnNZjUqv-P2sR2IbCUkhfC3s7wzukYhjBvTv5NNxY8D7fgUobCETW4Ft-HqcK8VPKWTIHbY7gRsYUsBVidNg';
 
 const server = http.createServer((req, res) => {
     res.writeHead(200);
