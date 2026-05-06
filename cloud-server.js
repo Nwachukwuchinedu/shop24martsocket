@@ -44,6 +44,12 @@ wss.on('connection', (ws, req) => {
 
             // 2. Relay Print Job (from Website/Phone)
             if (data.type === 'print') {
+                if (data.token !== SECRET_TOKEN) {
+                    console.log(`[${new Date().toISOString()}] Unauthorized print attempt`);
+                    ws.send(JSON.stringify({ type: 'error', message: 'Unauthorized: Invalid token' }));
+                    return;
+                }
+
                 const targetId = data.deviceId;
                 const targetWs = devices.get(targetId);
 
