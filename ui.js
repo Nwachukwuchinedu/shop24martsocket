@@ -168,5 +168,10 @@ function addActivity(msg) {
 }
 
 // Initial Load
-loadPrinters();
-log('Dashboard ready.', 'system');
+console.log('Checking Electron API:', window.electronAPI);
+if (window.electronAPI) {
+    loadPrinters();
+    log('Dashboard ready.', 'system');
+} else {
+    log('Error: Electron API not found. Please restart the app.', 'error');
+}
