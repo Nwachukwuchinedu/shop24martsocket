@@ -11,6 +11,10 @@ const execAsync = promisify(exec);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// ─── Branding & Identity ───────────────────────────────────────────────────
+app.setAppUserModelId('com.shop24mart.printbridge');
+const ICON_PATH = path.join(__dirname, 'icon.ico');
+
 // ─── App Directories ───────────────────────────────────────────────────────
 const USER_DATA = app.getPath('userData');
 const CONFIG_PATH = path.join(USER_DATA, 'config.json');
@@ -202,7 +206,7 @@ function createWindow() {
         height: 750,
         minWidth: 800,
         minHeight: 600,
-        icon: path.join(__dirname, 'icon.ico'), // Custom Icon
+        icon: ICON_PATH,
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             nodeIntegration: false,
@@ -317,18 +321,33 @@ ipcMain.handle('printers:set-active', (event, name) => {
 });
 
 // ─── Tray & App Lifecycle ──────────────────────────────────────────────────
+let isQuitting = false;
+
 function updateTray() {
     if (!tray) return;
     const contextMenu = Menu.buildFromTemplate([
         { label: `Shop24Mart Bridge: ${isConnected ? 'Online' : 'Offline'}`, enabled: false },
-        { label: `Device: ${config.deviceId}`, enabled: false },
+        { label: `Device: ${config.deviceId || 'Not Set'}`, enabled: false },
         { type: 'separator' },
-        { label: 'Open Dashboard', click: () => { if (!mainWindow) createWindow(); else mainWindow.focus(); } },
-        { label: isConnected ? 'Disconnect' : 'Connect', click: () => isConnected ? disconnectCloud() : connectToCloud() },
+        { label: 'Open Dashboard', click: () => mainWindow?.show() },
+        { 
+            label: isConnected ? 'Disconnect' : 'Connect', 
+            click: () => isConnected ? disconnectCloud() : connectToCloud() 
+        },
         { type: 'separator' },
-        { label: 'Quit', click: () => app.quit() }
+        { label: 'Quit', click: () => {
+            isQuitting = true;
+            app.quit();
+        }}
     ]);
     tray.setContextMenu(contextMenu);
+    tray.setToolTip('Shop24Mart Print Bridge');
+}
+
+function createTray() {
+    const icon = nativeImage.createFromPath(ICON_PATH);
+    tray = new Tray(icon);
+    updateTray();
 }
 
 function showNotification(title, body) {
@@ -337,13 +356,7 @@ function showNotification(title, body) {
 
 app.whenReady().then(() => {
     loadConfig();
-    
-    // Create Tray
-    const iconPath = path.join(__dirname, 'icon.png');
-    const icon = nativeImage.createFromPath(iconPath);
-    tray = new Tray(icon.resize({ width: 16, height: 16 }));
-    tray.setToolTip('Shop24Mart Print Bridge');
-    
+    createTray();
     createWindow();
     connectToCloud();
 });
