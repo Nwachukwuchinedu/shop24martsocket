@@ -1,4 +1,4 @@
-import { app, Tray, Menu, nativeImage, Notification, dialog } from 'electron';
+import { app, Tray, Menu, nativeImage, Notification, BrowserWindow, ipcMain } from 'electron';
 import WebSocket from 'ws';
 import fs from 'fs';
 import path from 'path';
@@ -8,85 +8,98 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-// ─── Hide from taskbar & dock, tray only ───────────────────────────────────
-if (app.dock) app.dock.hide();
+// ─── App Directories ───────────────────────────────────────────────────────
+const USER_DATA = app.getPath('userData');
+const CONFIG_PATH = path.join(USER_DATA, 'config.json');
+const LOG_FILE = path.join(USER_DATA, 'bridge.log');
 
-// ─── Single instance lock ──────────────────────────────────────────────────
-const gotLock = app.requestSingleInstanceLock();
-if (!gotLock) { app.quit(); }
-
-// ─── Configuration ────────────────────────────────────────────────────────
-// Use computer name as default device ID if not specified
-const DEVICE_ID = process.env.DEVICE_ID || 'shop-device-1';
-const CLOUD_URL = process.env.CLOUD_URL || 'wss://desktop-app-p9b4.onrender.com';
-const SECRET_TOKEN = process.env.SECRET_TOKEN || 'BLkXnNZjUqv-P2sR2IbCUkhfC3s7wzukYhjBvTv5NNxY8D7fgUobCETW4Ft-HqcK8VPKWTIHbY7gRsYUsBVidNg';
-
-// ─── Logging ──────────────────────────────────────────────────────────────
-const logDir = path.join(app.getPath('userData'), 'logs');
-if (!fs.existsSync(logDir)) fs.mkdirSync(logDir, { recursive: true });
-const logFile = path.join(logDir, 'bridge.log');
-
-function log(msg) {
-    const line = `[${new Date().toLocaleString('en-NG')}] ${msg}\n`;
-    fs.appendFileSync(logFile, line);
-    console.log(msg);
-}
+// ─── Default Config ────────────────────────────────────────────────────────
+const DEFAULT_CONFIG = {
+    deviceId: os.hostname() || 'shop-device-1',
+    cloudUrl: 'wss://desktop-app-p9b4.onrender.com',
+    token: 'BLkXnNZjUqv-P2sR2IbCUkhfC3s7wzukYhjBvTv5NNxY8D7fgUobCETW4Ft-HqcK8VPKWTIHbY7gRsYUsBVidNg',
+    printers: ['POS58'],
+    activePrinter: 'POS58'
+};
 
 // ─── State ─────────────────────────────────────────────────────────────────
-let ws = null;
+let config = { ...DEFAULT_CONFIG };
+let mainWindow = null;
 let tray = null;
+let ws = null;
 let isConnected = false;
 let isConnecting = false;
 let jobsHandled = 0;
 let reconnectTimeout = null;
 
-// ─── WebSocket Client ──────────────────────────────────────────────────────
+// ─── Load/Save Config ──────────────────────────────────────────────────────
+function loadConfig() {
+    if (fs.existsSync(CONFIG_PATH)) {
+        try {
+            const data = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
+            config = { ...DEFAULT_CONFIG, ...data };
+        } catch (e) {
+            console.error('Failed to load config, using defaults');
+        }
+    } else {
+        saveConfig();
+    }
+}
+
+function saveConfig() {
+    fs.writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2));
+}
+
+// ─── Logging ──────────────────────────────────────────────────────────────
+function logToUI(message, type = 'system') {
+    if (mainWindow) {
+        mainWindow.webContents.send('log:update', { message, type });
+    }
+    const line = `[${new Date().toLocaleString('en-NG')}] [${type.toUpperCase()}] ${message}\n`;
+    fs.appendFileSync(LOG_FILE, line);
+    console.log(line.trim());
+}
+
+// ─── WebSocket Bridge Logic ────────────────────────────────────────────────
 function connectToCloud() {
     if (ws || isConnecting) return;
 
     isConnecting = true;
-    updateTray();
+    updateUIState();
     
-    log(`Connecting to cloud: ${CLOUD_URL}...`);
+    logToUI(`Connecting to cloud: ${config.cloudUrl}...`, 'system');
 
-    ws = new WebSocket(CLOUD_URL);
+    ws = new WebSocket(config.cloudUrl);
 
     ws.on('open', () => {
         isConnecting = false;
         isConnected = true;
-        log(`Connected to cloud. Registering as ${DEVICE_ID}...`);
+        logToUI(`Connected to cloud as ${config.deviceId}`, 'success');
         
-        // Register device
         ws.send(JSON.stringify({
             type: 'register',
-            deviceId: DEVICE_ID,
-            token: SECRET_TOKEN
+            deviceId: config.deviceId,
+            token: config.token
         }));
         
-        updateTray();
-        showNotification('Bridge Connected', `Linked to cloud as: ${DEVICE_ID}`);
+        updateUIState();
+        showNotification('Bridge Online', `Connected as ${config.deviceId}`);
     });
 
     ws.on('message', async (data) => {
         try {
             const message = JSON.parse(data.toString());
-            log(`Received: ${message.type || 'unknown'}`);
-
-            if (message.type === 'registered') {
-                log(`Device registration confirmed: ${message.deviceId}`);
-            }
 
             if (message.type === 'print_job') {
                 handlePrintJob(message);
             }
 
             if (message.type === 'error') {
-                log(`Server error: ${message.message}`);
-                showNotification('Cloud Error', message.message);
+                logToUI(`Server Error: ${message.message}`, 'error');
             }
 
         } catch (err) {
-            log(`Message parse error: ${err.message}`);
+            logToUI(`Message error: ${err.message}`, 'error');
         }
     });
 
@@ -94,10 +107,9 @@ function connectToCloud() {
         isConnected = false;
         isConnecting = false;
         ws = null;
-        log('Disconnected from cloud. Retrying in 5s...');
-        updateTray();
+        logToUI('Disconnected from cloud. Retrying...', 'error');
+        updateUIState();
         
-        // Auto-reconnect
         if (!reconnectTimeout) {
             reconnectTimeout = setTimeout(() => {
                 reconnectTimeout = null;
@@ -107,163 +119,168 @@ function connectToCloud() {
     });
 
     ws.on('error', (err) => {
-        log(`WS error: ${err.message}`);
+        logToUI(`Connection error: ${err.message}`, 'error');
         isConnecting = false;
-        updateTray();
+        updateUIState();
     });
 
-    // Heartbeat: Response to server ping
-    ws.on('ping', () => {
-        ws.pong();
-    });
+    ws.on('ping', () => ws.pong());
 }
 
 function handlePrintJob(job) {
     try {
-        const { buffer: base64, printerName } = job;
+        const { buffer: base64 } = job;
+        const targetPrinter = `\\\\${os.hostname()}\\${config.activePrinter}`;
 
-        // Windows thermal printer path hack
-        const cleanPrinterName = (printerName || 'POS58').replace('POSPrinter ', '');
-        const targetPrinter = `\\\\${os.hostname()}\\${cleanPrinterName}`;
-
-        log(`Print job #${++jobsHandled} → ${targetPrinter}`);
+        logToUI(`New Job Incoming → ${config.activePrinter}`, 'job');
 
         const buffer = Buffer.from(base64, 'base64');
 
         fs.writeFile(targetPrinter, buffer, (err) => {
             if (err) {
-                log(`Print failed: ${err.message}`);
+                logToUI(`Print failed: ${err.message}`, 'error');
                 showNotification('Print Failed', err.message);
             } else {
-                log(`Job #${jobsHandled} printed successfully.`);
-                showNotification('Receipt Printed', `Job #${jobsHandled} sent to printer.`);
+                jobsHandled++;
+                logToUI(`Job #${jobsHandled} printed successfully.`, 'success');
+                if (mainWindow) {
+                    mainWindow.webContents.send('job:update', { 
+                        totalJobs: jobsHandled, 
+                        printer: config.activePrinter 
+                    });
+                }
             }
-            updateTray();
         });
 
     } catch (err) {
-        log(`Processing error: ${err.message}`);
+        logToUI(`Processing error: ${err.message}`, 'error');
     }
 }
 
 function disconnectCloud() {
     if (ws) {
-        log('Closing connection...');
         ws.close();
         ws = null;
     }
     isConnected = false;
     isConnecting = false;
+    updateUIState();
+    logToUI('Bridge disconnected manually.', 'system');
+}
+
+// ─── UI & IPC ──────────────────────────────────────────────────────────────
+function updateUIState() {
+    if (mainWindow) {
+        mainWindow.webContents.send('status:update', {
+            connected: isConnected,
+            connecting: isConnecting,
+            deviceId: config.deviceId
+        });
+    }
     updateTray();
 }
 
-// ─── Notifications ─────────────────────────────────────────────────────────
-function showNotification(title, body) {
-    if (Notification.isSupported()) {
-        new Notification({ title, body, silent: true }).show();
+function createWindow() {
+    mainWindow = new BrowserWindow({
+        width: 1000,
+        height: 700,
+        backgroundColor: '#0f172a',
+        show: false,
+        webPreferences: {
+            preload: path.join(__dirname, 'preload.js'),
+            nodeIntegration: false,
+            contextIsolation: true
+        }
+    });
+
+    mainWindow.loadFile('index.html');
+
+    mainWindow.once('ready-to-show', () => {
+        mainWindow.show();
+        updateUIState();
+    });
+
+    mainWindow.on('closed', () => {
+        mainWindow = null;
+    });
+}
+
+// ─── IPC Handlers ──────────────────────────────────────────────────────────
+ipcMain.on('bridge:connect', connectToCloud);
+ipcMain.on('bridge:disconnect', disconnectCloud);
+ipcMain.on('bridge:reconnect', () => {
+    disconnectCloud();
+    setTimeout(connectToCloud, 1000);
+});
+
+ipcMain.handle('printers:get', () => ({
+    list: config.printers,
+    active: config.activePrinter
+}));
+
+ipcMain.handle('printers:add', (event, name) => {
+    if (!config.printers.includes(name)) {
+        config.printers.push(name);
+        saveConfig();
+        logToUI(`Added printer: ${name}`, 'system');
     }
-}
+    return config.printers;
+});
 
-// ─── Tray ──────────────────────────────────────────────────────────────────
-function getStatusLabel() {
-    if (isConnecting) return '🟡  Connecting...';
-    if (isConnected) return `🟢  Online: ${DEVICE_ID}`;
-    return `⛔  Offline (Disconnected)`;
-}
+ipcMain.handle('printers:remove', (event, name) => {
+    config.printers = config.printers.filter(p => p !== name);
+    if (config.activePrinter === name) {
+        config.activePrinter = config.printers[0] || 'POS58';
+    }
+    saveConfig();
+    logToUI(`Removed printer: ${name}`, 'system');
+    return config.printers;
+});
 
+ipcMain.handle('printers:set-active', (event, name) => {
+    config.activePrinter = name;
+    saveConfig();
+    logToUI(`Switched active printer to: ${name}`, 'system');
+    return true;
+});
+
+// ─── Tray & App Lifecycle ──────────────────────────────────────────────────
 function updateTray() {
     if (!tray) return;
-
-    const menu = Menu.buildFromTemplate([
-        {
-            label: 'Shop24Mart Print Bridge (Cloud)',
-            enabled: false,
-        },
+    const contextMenu = Menu.buildFromTemplate([
+        { label: `Shop24Mart Bridge: ${isConnected ? 'Online' : 'Offline'}`, enabled: false },
+        { label: `Device: ${config.deviceId}`, enabled: false },
         { type: 'separator' },
-        {
-            label: getStatusLabel(),
-            enabled: false,
-        },
-        {
-            label: `🆔  Device: ${DEVICE_ID}`,
-            enabled: false,
-        },
-        {
-            label: `🖨️  Jobs handled: ${jobsHandled}`,
-            enabled: false,
-        },
+        { label: 'Open Dashboard', click: () => { if (!mainWindow) createWindow(); else mainWindow.focus(); } },
+        { label: isConnected ? 'Disconnect' : 'Connect', click: () => isConnected ? disconnectCloud() : connectToCloud() },
         { type: 'separator' },
-        {
-            label: '▶  Connect to Cloud',
-            enabled: !isConnected && !isConnecting,
-            click: () => connectToCloud()
-        },
-        {
-            label: '🔄  Force Reconnect',
-            enabled: true,
-            click: () => {
-                disconnectCloud();
-                setTimeout(connectToCloud, 1000);
-            }
-        },
-        {
-            label: '⏹  Disconnect',
-            enabled: isConnected || isConnecting,
-            click: () => disconnectCloud()
-        },
-        { type: 'separator' },
-        {
-            label: '📄  View Logs',
-            click: () => {
-                import('electron').then(({ shell }) => {
-                    shell.openPath(logFile);
-                });
-            }
-        },
-        { type: 'separator' },
-        {
-            label: '✕  Quit',
-            click: () => {
-                disconnectCloud();
-                app.quit();
-            }
-        }
+        { label: 'Quit', click: () => app.quit() }
     ]);
-
-    tray.setContextMenu(menu);
-    tray.setToolTip(
-        isConnected
-            ? `Shop24Mart Bridge • Online as ${DEVICE_ID}`
-            : 'Shop24Mart Bridge • Offline'
-    );
+    tray.setContextMenu(contextMenu);
 }
 
-// ─── App Ready ─────────────────────────────────────────────────────────────
-app.whenReady().then(() => {
-    app.setAppUserModelId('Shop24Mart Print Bridge');
+function showNotification(title, body) {
+    new Notification({ title, body, silent: true }).show();
+}
 
-    // Build tray icon
+app.whenReady().then(() => {
+    loadConfig();
+    
+    // Create Tray
     const iconPath = path.join(__dirname, 'icon.png');
     const icon = nativeImage.createFromPath(iconPath);
     tray = new Tray(icon.resize({ width: 16, height: 16 }));
-
     tray.setToolTip('Shop24Mart Print Bridge');
-
-    // Left click → show balloon
-    tray.on('click', () => {
-        showNotification(
-            'Shop24Mart Print Bridge',
-            isConnected
-                ? `Connected to cloud as: ${DEVICE_ID}`
-                : 'Bridge is offline. Right-click to connect.'
-        );
-    });
-
-    // Auto-connect
+    
+    createWindow();
     connectToCloud();
-    updateTray();
-
-    log('App ready.');
 });
 
-app.on('window-all-closed', (e) => e.preventDefault());
+app.on('window-all-closed', () => {
+    // Keep running in tray on macOS, but for Windows we usually want to keep it too
+    // unless explicitly quit.
+});
+
+app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+});
