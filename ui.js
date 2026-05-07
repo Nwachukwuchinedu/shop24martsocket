@@ -1,9 +1,9 @@
 // ─── State Management ──────────────────────────────────────────────────────
 const state = {
     isConnected: false,
-    deviceId: 'shop-device-1',
+    deviceId: '',
     jobsCount: 0,
-    activePrinter: 'POS58',
+    activePrinter: '',
     printers: []
 };
 
@@ -87,6 +87,36 @@ elements.btnClearLogs.addEventListener('click', () => {
     elements.consoleView.innerHTML = '<div class="log-entry system">Logs cleared.</div>';
 });
 
+const btnSaveDeviceId = document.getElementById('btn-save-device-id');
+btnSaveDeviceId.addEventListener('click', async () => {
+    const input = document.getElementById('config-device-id');
+    const newId = input.value.trim();
+    
+    if (!newId) {
+        alert('Please enter a valid Device ID');
+        return;
+    }
+    
+    btnSaveDeviceId.disabled = true;
+    btnSaveDeviceId.textContent = 'Saving...';
+    
+    const result = await window.electronAPI.setDeviceId(newId);
+    
+    if (result.success) {
+        input.value = '';
+        btnSaveDeviceId.textContent = 'Updated!';
+        btnSaveDeviceId.classList.add('success');
+        
+        log(`Device ID successfully updated to: ${newId}`, 'success');
+        
+        setTimeout(() => {
+            btnSaveDeviceId.disabled = false;
+            btnSaveDeviceId.textContent = 'Update Device ID';
+            btnSaveDeviceId.classList.remove('success');
+        }, 2000);
+    }
+});
+
 // ─── Printer Management ─────────────────────────────────────────────────────
 async function loadPrinters() {
     const data = await window.electronAPI.getPrinters();
@@ -94,7 +124,7 @@ async function loadPrinters() {
     state.activePrinter = data.active;
     
     renderPrinters();
-    elements.printerStat.textContent = state.activePrinter;
+    elements.printerStat.textContent = state.activePrinter || 'None';
     loadSystemPrinters(); // Also refresh system list
 }
 

@@ -3,7 +3,7 @@ import os from 'os';
 
 const CLOUD_URL = 'wss://desktop-app-p9b4.onrender.com';
 const SECRET_TOKEN = 'BLkXnNZjUqv-P2sR2IbCUkhfC3s7wzukYhjBvTv5NNxY8D7fgUobCETW4Ft-HqcK8VPKWTIHbY7gRsYUsBVidNg';
-const DEVICE_ID = 'shop-device-1'; // Match what Electron uses
+const DEVICE_ID = ''; // Set manually for testing
 
 const ws = new WebSocket(CLOUD_URL);
 
@@ -16,7 +16,7 @@ ws.on('open', () => {
         deviceId: DEVICE_ID,
         token: SECRET_TOKEN,
         buffer: Buffer.from('SHOP24MART TEST PRINT\r\n---------------------\r\nHello from Cloud!\r\nDate: ' + new Date().toLocaleString() + '\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\r\n\x1d\x56\x42\x00').toString('base64'),
-        printerName: 'POS58'
+        printerName: ''
     };
 
     console.log(`Sending print job to ${DEVICE_ID}...`);

@@ -18,11 +18,11 @@ const LOG_FILE = path.join(USER_DATA, 'bridge.log');
 
 // ─── Default Config ────────────────────────────────────────────────────────
 const DEFAULT_CONFIG = {
-    deviceId: os.hostname() || 'shop-device-1',
+    deviceId: '', // User will set this
     cloudUrl: 'wss://desktop-app-p9b4.onrender.com',
     token: 'BLkXnNZjUqv-P2sR2IbCUkhfC3s7wzukYhjBvTv5NNxY8D7fgUobCETW4Ft-HqcK8VPKWTIHbY7gRsYUsBVidNg',
-    printers: ['POS58'],
-    activePrinter: 'POS58'
+    printers: [],
+    activePrinter: null
 };
 
 // ─── State ─────────────────────────────────────────────────────────────────
@@ -66,6 +66,13 @@ function logToUI(message, type = 'system') {
 // ─── WebSocket Bridge Logic ────────────────────────────────────────────────
 function connectToCloud() {
     if (ws || isConnecting) return;
+    
+    if (!config.deviceId) {
+        logToUI('Cannot connect: Device ID not set. Please set it in Printer Settings.', 'error');
+        isConnecting = false;
+        updateUIState();
+        return;
+    }
 
     isConnecting = true;
     updateUIState();
@@ -133,6 +140,11 @@ function connectToCloud() {
 
 function handlePrintJob(job) {
     try {
+        if (!config.activePrinter) {
+            logToUI('Print job ignored: No active printer selected.', 'error');
+            return;
+        }
+
         const { buffer: base64 } = job;
         const targetPrinter = `\\\\${os.hostname()}\\${config.activePrinter}`;
 
@@ -217,6 +229,18 @@ ipcMain.on('bridge:reconnect', () => {
     setTimeout(connectToCloud, 1000);
 });
 
+ipcMain.handle('device:set-id', (event, id) => {
+    config.deviceId = id;
+    saveConfig();
+    logToUI(`Device ID updated to: ${id}`, 'system');
+    
+    // Update UI and trigger connection
+    updateUIState();
+    connectToCloud();
+    
+    return { success: true };
+});
+
 ipcMain.handle('system-printers:get', async () => {
     try {
         const { stdout } = await execAsync('powershell "Get-Printer | Select-Object Name, Shared, ShareName | ConvertTo-Json"');
@@ -272,7 +296,7 @@ ipcMain.handle('printers:add', (event, name) => {
 ipcMain.handle('printers:remove', (event, name) => {
     config.printers = config.printers.filter(p => p !== name);
     if (config.activePrinter === name) {
-        config.activePrinter = config.printers[0] || 'POS58';
+        config.activePrinter = config.printers[0];
     }
     saveConfig();
     logToUI(`Removed printer: ${name}`, 'system');

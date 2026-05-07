@@ -54,7 +54,7 @@
                 <div class="stats-grid">
                     <div class="stat-card">
                         <span class="stat-label">Device ID</span>
-                        <span class="stat-value" id="stat-device-id">shop-device-1</span>
+                        <span class="stat-value" id="stat-device-id">---</span>
                     </div>
                     <div class="stat-card">
                         <span class="stat-label">Jobs Handled</span>
@@ -62,7 +62,7 @@
                     </div>
                     <div class="stat-card">
                         <span class="stat-label">Active Printer</span>
-                        <span class="stat-value highlight" id="stat-printer">POS58</span>
+                        <span class="stat-value highlight" id="stat-printer">None</span>
                     </div>
                 </div>
 
@@ -80,7 +80,14 @@
                     <h1>Printer Management</h1>
                 </header>
                 
-                <div class="printer-config">
+                    <div class="input-group vertical">
+                        <label class="input-label">Device Configuration</label>
+                        <input type="text" id="config-device-id" placeholder="Set Device ID (e.g. SHOP-01)">
+                        <button id="btn-save-device-id" class="btn secondary">Update Device ID</button>
+                    </div>
+
+                    <div class="divider">PRINTER SETUP</div>
+
                     <div class="setup-header">
                         <h3>Quick Setup & Share</h3>
                         <p>Select an installed printer to rename and share it automatically.</p>
@@ -97,7 +104,7 @@
                     <div class="divider">OR</div>
 
                     <div class="input-group">
-                        <input type="text" id="new-printer-name" placeholder="Enter share name manually (e.g. POS58)">
+                        <input type="text" id="new-printer-name" placeholder="Enter share name manually">
                         <button id="btn-add-printer" class="btn secondary">Add Manually</button>
                     </div>
                     
