@@ -199,16 +199,22 @@ function updateUIState() {
 function createWindow() {
     mainWindow = new BrowserWindow({
         width: 1000,
-        height: 700,
-        backgroundColor: '#0f172a',
-        show: false,
+        height: 750,
+        minWidth: 800,
+        minHeight: 600,
+        icon: path.join(__dirname, 'icon.ico'), // Custom Icon
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             nodeIntegration: false,
             contextIsolation: true
-        }
+        },
+        backgroundColor: '#0f172a',
+        title: 'Shop24Mart Print Suite'
     });
 
+    // Remove the default "File, Edit, View" menu
+    Menu.setApplicationMenu(null);
+    
     mainWindow.loadFile('index.html');
 
     mainWindow.once('ready-to-show', () => {

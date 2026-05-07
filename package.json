@@ -10,33 +10,44 @@
     "bridge": "electron .",
     "build": "electron-builder --win --x64"
   },
-"build": {
+  "build": {
     "appId": "com.shop24mart.printbridge",
-    "productName": "Shop24Mart Print Bridge",
-    "forceCodeSigning": false,
+    "productName": "Shop24Mart Print Suite",
+    "compression": "maximum",
+    "asar": true,
+    "directories": {
+      "output": "dist",
+      "buildResources": "."
+    },
     "win": {
-      "target": "nsis",
-      "icon": "icon.ico",
-      "signingHashAlgorithms": null,
-      "sign": null
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "icon": "icon.ico"
     },
     "nsis": {
       "oneClick": true,
       "runAfterFinish": true,
-      "createDesktopShortcut": false,
-      "createStartMenuShortcut": true
-    },
-    "directories": {
-      "buildResources": ".",
-      "output": "dist"
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "allowToChangeInstallationDirectory": false
     },
     "files": [
       "main.js",
+      "preload.js",
+      "ui.js",
+      "index.html",
+      "styles.css",
       "icon.ico",
-      "icon.png",
-      "node_modules/**/*"
+      "node_modules/**/*",
+      "!test.js",
+      "!cloud-server.js",
+      "!*.log"
     ]
-},
+  },
   "dependencies": {
     "ws": "^8.18.0"
   },
