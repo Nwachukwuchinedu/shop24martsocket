@@ -285,7 +285,54 @@ h3 {
 .input-group {
     display: flex;
     gap: 12px;
-    margin-bottom: 32px;
+    margin-bottom: 24px;
+}
+
+.input-group.vertical {
+    flex-direction: column;
+}
+
+.setup-header {
+    margin-bottom: 20px;
+}
+
+.setup-header p {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+    margin-top: 4px;
+}
+
+.divider {
+    display: flex;
+    align-items: center;
+    text-align: center;
+    color: var(--text-secondary);
+    font-size: 0.7rem;
+    font-weight: 700;
+    margin: 24px 0;
+}
+
+.divider::before, .divider::after {
+    content: '';
+    flex: 1;
+    border-bottom: 1px solid var(--glass-border);
+}
+
+.divider:not(:empty)::before { margin-right: .5em; }
+.divider:not(:empty)::after { margin-left: .5em; }
+
+select {
+    background-color: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--glass-border);
+    border-radius: 10px;
+    padding: 12px 16px;
+    color: white;
+    outline: none;
+    cursor: pointer;
+}
+
+select option {
+    background-color: var(--bg-sidebar);
 }
 
 input {

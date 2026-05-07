@@ -11,6 +11,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     addPrinter: (name) => ipcRenderer.invoke('printers:add', name),
     removePrinter: (name) => ipcRenderer.invoke('printers:remove', name),
     setActivePrinter: (name) => ipcRenderer.invoke('printers:set-active', name),
+    
+    // New: OS level printer setup
+    getSystemPrinters: () => ipcRenderer.invoke('system-printers:get'),
+    setupLocalPrinter: (data) => ipcRenderer.invoke('printer:setup-local', data),
 
     // State listeners
     onStatusUpdate: (callback) => ipcRenderer.on('status:update', (_event, value) => callback(value)),

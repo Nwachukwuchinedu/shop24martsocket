@@ -95,7 +95,61 @@ async function loadPrinters() {
     
     renderPrinters();
     elements.printerStat.textContent = state.activePrinter;
+    loadSystemPrinters(); // Also refresh system list
 }
+
+async function loadSystemPrinters() {
+    const sysSelect = document.getElementById('system-printer-select');
+    if (!sysSelect) return;
+
+    try {
+        const printers = await window.electronAPI.getSystemPrinters();
+        
+        // Handle both single object and array response from PowerShell
+        const printerList = Array.isArray(printers) ? printers : [printers];
+        
+        sysSelect.innerHTML = '<option value="">-- Select Installed Printer --</option>';
+        printerList.forEach(p => {
+            if (!p || !p.Name) return;
+            const opt = document.createElement('option');
+            opt.value = p.Name;
+            opt.textContent = `${p.Name} ${p.Shared ? '(Shared)' : ''}`;
+            sysSelect.appendChild(opt);
+        });
+    } catch (e) {
+        sysSelect.innerHTML = '<option value="">Error loading printers</option>';
+    }
+}
+
+const btnSetupPrinter = document.getElementById('btn-setup-printer');
+btnSetupPrinter.addEventListener('click', async () => {
+    const oldName = document.getElementById('system-printer-select').value;
+    const newName = document.getElementById('setup-new-name').value.trim();
+    
+    if (!oldName || !newName) {
+        alert('Please select a printer and enter a new name.');
+        return;
+    }
+
+    btnSetupPrinter.disabled = true;
+    btnSetupPrinter.textContent = 'Configuring...';
+    
+    log(`Starting system setup for ${oldName} → ${newName}`, 'system');
+    
+    const result = await window.electronAPI.setupLocalPrinter({ oldName, newName });
+    
+    btnSetupPrinter.disabled = false;
+    btnSetupPrinter.textContent = 'Configure & Share Printer';
+
+    if (result.success) {
+        document.getElementById('setup-new-name').value = '';
+        log('System printer setup successful!', 'success');
+        loadPrinters();
+    } else {
+        alert(`Failed to setup printer: ${result.error}`);
+        log(`Setup error: ${result.error}`, 'error');
+    }
+});
 
 function renderPrinters() {
     elements.printerList.innerHTML = '';

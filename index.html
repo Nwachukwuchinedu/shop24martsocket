@@ -81,9 +81,24 @@
                 </header>
                 
                 <div class="printer-config">
+                    <div class="setup-header">
+                        <h3>Quick Setup & Share</h3>
+                        <p>Select an installed printer to rename and share it automatically.</p>
+                    </div>
+                    
+                    <div class="input-group vertical">
+                        <select id="system-printer-select">
+                            <option value="">Loading system printers...</option>
+                        </select>
+                        <input type="text" id="setup-new-name" placeholder="New printer name (e.g. Shop24Mart-POS)">
+                        <button id="btn-setup-printer" class="btn primary">Configure & Share Printer</button>
+                    </div>
+
+                    <div class="divider">OR</div>
+
                     <div class="input-group">
-                        <input type="text" id="new-printer-name" placeholder="Enter printer share name (e.g. POS58)">
-                        <button id="btn-add-printer" class="btn primary">Add Printer</button>
+                        <input type="text" id="new-printer-name" placeholder="Enter share name manually (e.g. POS58)">
+                        <button id="btn-add-printer" class="btn secondary">Add Manually</button>
                     </div>
                     
                     <div class="printer-list-container">

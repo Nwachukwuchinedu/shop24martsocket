@@ -4,7 +4,10 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { fileURLToPath } from 'url';
+import { exec } from 'child_process';
+import { promisify } from 'util';
 
+const execAsync = promisify(exec);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -212,6 +215,44 @@ ipcMain.on('bridge:disconnect', disconnectCloud);
 ipcMain.on('bridge:reconnect', () => {
     disconnectCloud();
     setTimeout(connectToCloud, 1000);
+});
+
+ipcMain.handle('system-printers:get', async () => {
+    try {
+        const { stdout } = await execAsync('powershell "Get-Printer | Select-Object Name, Shared, ShareName | ConvertTo-Json"');
+        return JSON.parse(stdout);
+    } catch (e) {
+        console.error('Failed to get system printers', e);
+        return [];
+    }
+});
+
+ipcMain.handle('printer:setup-local', async (event, { oldName, newName }) => {
+    try {
+        logToUI(`Starting configuration for: ${oldName} → ${newName}`, 'system');
+        
+        // 1. Rename Printer
+        const renameCmd = `powershell -Command "Rename-Printer -Name '${oldName}' -NewName '${newName}'"`;
+        await execAsync(renameCmd);
+        logToUI(`Printer renamed to ${newName}`, 'success');
+
+        // 2. Enable Sharing and set Share Name
+        const shareCmd = `powershell -Command "Set-Printer -Name '${newName}' -Shared $true -ShareName '${newName}'"`;
+        await execAsync(shareCmd);
+        logToUI(`Printer shared as ${newName}`, 'success');
+
+        // 3. Update our internal bridge config
+        if (!config.printers.includes(newName)) {
+            config.printers.push(newName);
+        }
+        config.activePrinter = newName;
+        saveConfig();
+
+        return { success: true };
+    } catch (e) {
+        logToUI(`Setup failed: ${e.message}`, 'error');
+        return { success: false, error: e.message };
+    }
 });
 
 ipcMain.handle('printers:get', () => ({
