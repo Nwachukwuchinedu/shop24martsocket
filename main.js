@@ -69,14 +69,15 @@ function connectToCloud() {
     
     logToUI(`Connecting to cloud: ${config.cloudUrl}...`, 'system');
 
-    ws = new WebSocket(config.cloudUrl);
+    const socket = new WebSocket(config.cloudUrl);
+    ws = socket;
 
-    ws.on('open', () => {
+    socket.on('open', () => {
         isConnecting = false;
         isConnected = true;
         logToUI(`Connected to cloud as ${config.deviceId}`, 'success');
         
-        ws.send(JSON.stringify({
+        socket.send(JSON.stringify({
             type: 'register',
             deviceId: config.deviceId,
             token: config.token
@@ -86,7 +87,7 @@ function connectToCloud() {
         showNotification('Bridge Online', `Connected as ${config.deviceId}`);
     });
 
-    ws.on('message', async (data) => {
+    socket.on('message', async (data) => {
         try {
             const message = JSON.parse(data.toString());
 
@@ -103,10 +104,10 @@ function connectToCloud() {
         }
     });
 
-    ws.on('close', () => {
+    socket.on('close', () => {
         isConnected = false;
         isConnecting = false;
-        ws = null;
+        if (ws === socket) ws = null;
         logToUI('Disconnected from cloud. Retrying...', 'error');
         updateUIState();
         
@@ -118,13 +119,13 @@ function connectToCloud() {
         }
     });
 
-    ws.on('error', (err) => {
+    socket.on('error', (err) => {
         logToUI(`Connection error: ${err.message}`, 'error');
         isConnecting = false;
         updateUIState();
     });
 
-    ws.on('ping', () => ws.pong());
+    socket.on('ping', () => socket.pong());
 }
 
 function handlePrintJob(job) {
