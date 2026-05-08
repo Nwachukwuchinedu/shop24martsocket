@@ -194,6 +194,7 @@ function renderPrinters() {
                 <span class="p-status">${isActive ? 'Currently Active' : 'Registered'}</span>
             </div>
             <div class="printer-actions">
+                <button class="btn-small secondary" onclick="testPrint('${p}')">Test</button>
                 ${isActive 
                     ? '<span class="btn-small active">Active</span>' 
                     : `<button class="btn-small select" onclick="setActivePrinter('${p}')">Select</button>`
@@ -204,6 +205,17 @@ function renderPrinters() {
         elements.printerList.appendChild(div);
     });
 }
+
+window.testPrint = async (name) => {
+    log(`Sending test print to ${name}...`, 'system');
+    const result = await window.electronAPI.testPrinter(name);
+    if (result.success) {
+        log(`Test print successful on ${name}`, 'success');
+    } else {
+        log(`Test print failed: ${result.error}`, 'error');
+        alert(`Test print failed: ${result.error}`);
+    }
+};
 
 elements.btnAddPrinter.addEventListener('click', async () => {
     const name = elements.newPrinterInput.value.trim();

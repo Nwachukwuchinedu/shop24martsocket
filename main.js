@@ -289,6 +289,35 @@ ipcMain.handle('printer:setup-local', async (event, { oldName, newName }) => {
     }
 });
 
+ipcMain.handle('printer:test', async (event, name) => {
+    return new Promise((resolve) => {
+        try {
+            const targetPrinter = `\\\\${os.hostname()}\\${name}`;
+            const testText = "SHOP24MART PRINT SUITE\n====================\n\n*** TEST PRINT SUCCESSFUL ***\n\nPrinter: " + name + "\nTime: " + new Date().toLocaleString() + "\n\n\n\n\n\n";
+            
+            // ESC @ (Init) + Text + GS V 0 (Cut)
+            const buffer = Buffer.concat([
+                Buffer.from([0x1B, 0x40]), 
+                Buffer.from(testText),
+                Buffer.from([0x1D, 0x56, 0x00])
+            ]);
+
+            fs.writeFile(targetPrinter, buffer, (err) => {
+                if (err) {
+                    logToUI(`Test print error on ${name}: ${err.message}`, 'error');
+                    resolve({ success: false, error: err.message });
+                } else {
+                    logToUI(`Test print successful on ${name}`, 'success');
+                    resolve({ success: true });
+                }
+            });
+        } catch (err) {
+            resolve({ success: false, error: err.message });
+        }
+    });
+});
+
+
 ipcMain.handle('printers:get', () => ({
     list: config.printers,
     active: config.activePrinter

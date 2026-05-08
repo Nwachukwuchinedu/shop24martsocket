@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // New: OS level printer setup
     getSystemPrinters: () => ipcRenderer.invoke('system-printers:get'),
     setupLocalPrinter: (data) => ipcRenderer.invoke('printer:setup-local', data),
+    testPrinter: (name) => ipcRenderer.invoke('printer:test', name),
     setDeviceId: (id) => ipcRenderer.invoke('device:set-id', id),
 
     // State listeners
