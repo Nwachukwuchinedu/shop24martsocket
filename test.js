@@ -1,7 +1,7 @@
 import WebSocket from 'ws';
 import os from 'os';
 
-const CLOUD_URL = 'wss://desktop-app-p9b4.onrender.com';
+const CLOUD_URL = 'wss://print.shop24mart.com';
 const SECRET_TOKEN = 'BLkXnNZjUqv-P2sR2IbCUkhfC3s7wzukYhjBvTv5NNxY8D7fgUobCETW4Ft-HqcK8VPKWTIHbY7gRsYUsBVidNg';
 const DEVICE_ID = ''; // Set manually for testing
 
