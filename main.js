@@ -45,6 +45,11 @@ function loadConfig() {
         try {
             const data = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8'));
             config = { ...DEFAULT_CONFIG, ...data };
+            // Update cloud URL if it doesn't match the new default
+            if (config.cloudUrl !== DEFAULT_CONFIG.cloudUrl) {
+                config.cloudUrl = DEFAULT_CONFIG.cloudUrl;
+                saveConfig();
+            }
         } catch (e) {
             console.error('Failed to load config, using defaults');
         }
