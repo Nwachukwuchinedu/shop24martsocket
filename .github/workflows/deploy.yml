@@ -1,0 +1,72 @@
+name: Deploy Print Server
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 21098
+
+          script: |
+            set -e
+
+            BRANCH="${{ github.ref_name }}"
+
+            # Determine target directory based on branch
+            # NOTE: Please adjust these paths if your cPanel Node.js Application root is different.
+            if [ "$BRANCH" = "main" ]; then
+              TARGET_DIR="/home/shopdbji/print"
+            elif [ "$BRANCH" = "dev" ]; then
+              TARGET_DIR="/home/shopdbji/devprint"
+            else
+              echo "Branch $BRANCH is not supported."
+              exit 1
+            fi
+
+            echo "Deploying branch $BRANCH to $TARGET_DIR"
+
+            cd $TARGET_DIR
+
+            echo "Loading NVM..."
+            export NVM_DIR="$HOME/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+
+            echo "Node version:"
+            node -v
+
+            echo "NPM version:"
+            npm -v
+
+            echo "Fetching latest code..."
+            git fetch origin
+
+            echo "Resetting repo..."
+            git reset --hard origin/$BRANCH
+
+            echo "Cleaning untracked files..."
+            git clean -fd
+
+            echo "Installing production dependencies..."
+            # Note: We use --production to avoid installing heavy Electron packages on the server
+            npm ci --production
+
+            # Since the relay server (cloud-server.js) runs directly and there is no build step
+            # needed for the server backend, we omit "npm run build" and "dist" copying steps.
+
+            echo "Restarting Node app..."
+            mkdir -p tmp
+            touch tmp/restart.txt
+
+            echo "Deployment successful!"
