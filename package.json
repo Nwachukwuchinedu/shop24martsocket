@@ -6,7 +6,6 @@
   "main": "main.js",
   "author": "Shop24Mart",
   "scripts": {
-    "start": "node cloud-server.js",
     "bridge": "electron .",
     "build": "electron-builder --win --x64"
   },

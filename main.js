@@ -23,7 +23,7 @@ const LOG_FILE = path.join(USER_DATA, 'bridge.log');
 // ─── Default Config ────────────────────────────────────────────────────────
 const DEFAULT_CONFIG = {
     deviceId: '', // User will set this
-    cloudUrl: 'wss://print.shop24mart.com',
+    cloudUrl: 'ws://localhost:3001',
     token: 'BLkXnNZjUqv-P2sR2IbCUkhfC3s7wzukYhjBvTv5NNxY8D7fgUobCETW4Ft-HqcK8VPKWTIHbY7gRsYUsBVidNg',
     printers: [],
     activePrinter: null
